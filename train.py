@@ -19,15 +19,18 @@ from eval import eval_net
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader, random_split
 from torch.utils.data.distributed import DistributedSampler
+import torchvision as tv
 import utils
 import models
 from utils.dataset import BasicDataset
 # %%
 logger = logging.getLogger(__name__)
 
-dir_img = osp.join("..", "unet_dataset", "images", "trainval")
-dir_mask = osp.join("..", "unet_dataset", "labels", "trainval")
+# dir_img = osp.join("..", "unet_dataset", "images", "trainval")
+# dir_mask = osp.join("..", "unet_dataset", "labels", "trainval")
 
+dir_img = osp.join(".", "dataset", "train")
+dir_mask = osp.join(".", "dataset", "train_GT")
 
 def is_parallel(model):
     return type(model) in (nn.parallel.DataParallel,
@@ -64,8 +67,8 @@ def get_args():
     parser.add_argument('-f',
                         '--load',
                         dest='load',
-                        type=str,
                         default=False,
+                        action='store_true',
                         help='Load model from a .pth file')
     parser.add_argument('-s',
                         '--scale',
@@ -82,7 +85,7 @@ def get_args():
                               that is used as validation (0-100)')
     parser.add_argument('-d',
                         '--device',
-                        default='',
+                        default='cpu',
                         help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--local_rank',
                         type=int,
@@ -90,7 +93,7 @@ def get_args():
                         help='DDP parameter, do not modify')
     parser.add_argument('--model_type',
                         type=str,
-                        default='unet',
+                        default='utrans',
                         help="Model which choosed.")
     parser.add_argument('--split_seed', type=int, default=None, help='')
     return parser.parse_args()
@@ -133,8 +136,10 @@ def train_net(model,
               save_all_cp=True,
               dir_checkpoint='runs',
               split_seed=None):
-
-    dataset = BasicDataset(dir_img, dir_mask)
+    transform_valid = tv.transforms.Compose([tv.transforms.ToTensor(),
+                                             tv.transforms.RandomCrop((400, 400))
+                                             ])
+    dataset = BasicDataset(dir_img, dir_mask, transform=transform_valid)
     n_val = int(len(dataset) *
                 val_percent) if val_percent < 1 else int(val_percent)
     n_train = len(dataset) - n_val
@@ -162,12 +167,12 @@ def train_net(model,
         train_loader = DataLoader(train,
                                   batch_size=batch_size,
                                   shuffle=True,
-                                  num_workers=8,
+                                  num_workers=0,
                                   pin_memory=True)
         val_loader = DataLoader(val,
                                 batch_size=batch_size,
                                 shuffle=False,
-                                num_workers=8,
+                                num_workers=0,
                                 pin_memory=True,
                                 drop_last=True)
 
@@ -228,6 +233,7 @@ def train_net(model,
         if save_all_cp:
             torch.save(model.state_dict(),
                        osp.join(dir_checkpoint, f'CP_epoch{i + 1}.pth'))
+        torch.cuda.empty_cache()
     # writer = SummaryWriter(log_dir=dir_checkpoint)
     # global_step = 0
 
@@ -357,8 +363,8 @@ if __name__ == '__main__':
         # "ecaunet": ECAU_Net,
         # "gsaunet": GsAUNet,
         # "utnet": U_Transformer,
-        "ddrnet": models.DualResNet,
-        "utrans": models.U_Transformer,
+        #"ddrnet": models.DualResNet,
+        "utrans": models.U_Transformer
     }
     try:
         net_type = nets[args.model_type.lower()]
