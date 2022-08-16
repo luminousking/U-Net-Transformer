@@ -23,6 +23,7 @@ import torchvision as tv
 import utils
 import models
 from utils.dataset import BasicDataset
+from utils.DriveDataset import DriveDataset
 # %%
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,8 @@ def select_device(device='', batch_size=None):
     logger.info(s)  # skip a line
     return torch.device('cuda:0' if cuda else 'cpu')
 
+ROOT_FOLDER = "./DRIVE/"
+task = "training" # "test"
 
 def train_net(model,
               device,
@@ -139,7 +142,9 @@ def train_net(model,
     transform_valid = tv.transforms.Compose([tv.transforms.ToTensor(),
                                              tv.transforms.RandomCrop((400, 400))
                                              ])
-    dataset = BasicDataset(dir_img, dir_mask, transform=transform_valid)
+    # dataset = BasicDataset(dir_img, dir_mask, transform=transform_valid)
+    dataset = DriveDataset(task, ROOT_FOLDER, transform=transform_valid)
+
     n_val = int(len(dataset) *
                 val_percent) if val_percent < 1 else int(val_percent)
     n_train = len(dataset) - n_val
@@ -233,102 +238,118 @@ def train_net(model,
         if save_all_cp:
             torch.save(model.state_dict(),
                        osp.join(dir_checkpoint, f'CP_epoch{i + 1}.pth'))
-        torch.cuda.empty_cache()
-    # writer = SummaryWriter(log_dir=dir_checkpoint)
-    # global_step = 0
+# BasicDataset
+# def train_net(model,
+#               device,
+#               epochs=5,
+#               batch_size=1,
+#               lr=0.001,
+#               val_percent=0.1,
+#               save_all_cp=True,
+#               dir_checkpoint='runs',
+#               split_seed=None):
+#     transform_valid = tv.transforms.Compose([tv.transforms.ToTensor(),
+#                                              tv.transforms.RandomCrop((400, 400))
+#                                              ])
+#     dataset = BasicDataset(dir_img, dir_mask, transform=transform_valid)
+#     n_val = int(len(dataset) *
+#                 val_percent) if val_percent < 1 else int(val_percent)
+#     n_train = len(dataset) - n_val
+#     if split_seed:
+#         train, val = random_split(
+#             dataset, [n_train, n_val],
+#             generator=torch.Generator().manual_seed(split_seed))
+#     else:
+#         train, val = random_split(dataset, [n_train, n_val])
+#     if type(model) == nn.parallel.DistributedDataParallel:
+#         train_loader = DataLoader(train,
+#                                   batch_size=batch_size,
+#                                   shuffle=False,
+#                                   num_workers=0,
+#                                   pin_memory=True,
+#                                   sampler=DistributedSampler(train))
+#         val_loader = DataLoader(val,
+#                                 batch_size=batch_size,
+#                                 shuffle=False,
+#                                 num_workers=0,
+#                                 pin_memory=True,
+#                                 drop_last=True,
+#                                 sampler=DistributedSampler(val))
+#     else:
+#         train_loader = DataLoader(train,
+#                                   batch_size=batch_size,
+#                                   shuffle=True,
+#                                   num_workers=0,
+#                                   pin_memory=True)
+#         val_loader = DataLoader(val,
+#                                 batch_size=batch_size,
+#                                 shuffle=False,
+#                                 num_workers=0,
+#                                 pin_memory=True,
+#                                 drop_last=True)
 
-    # optimizer = optim.RMSprop(net.parameters(),
-    #                           lr=lr,
-    #                           weight_decay=1e-8,
-    #                           momentum=0.9)
-    # scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-    #     optimizer, 'min' if net.n_classes > 1 else 'max', patience=2)
-    # if net.n_classes > 1:
-    #     criterion = nn.CrossEntropyLoss()
-    # else:
-    #     criterion = nn.BCEWithLogitsLoss()
+#     logging.info(f'''Starting training:
+#         Epochs:          {epochs}
+#         Batch size:      {batch_size}
+#         Learning rate:   {lr}
+#         Training size:   {n_train}
+#         Validation size: {n_val}
+#         Checkpoints:     {save_all_cp}
+#         Device:          {device.type}
+#     ''')
 
-    # for epoch in range(epochs):
-    #     net.train()
+#     # loss = nn.BCEWithLogitsLoss()
+#     # loss.__name__ = 'BCEWithLogitLoss'
+#     # loss = nn.BCELoss()
+#     # loss.__name__ = 'BCELoss'
+#     loss = utils.losses.NoiseRobustDiceLoss(eps=1e-7, activation='sigmoid')
+#     metrics = [
+#         utils.metrics.Dice(threshold=0.5, activation='sigmoid'),
+#         utils.metrics.Fscore(threshold=None, activation='sigmoid')
+#     ]
+#     optimizer = torch.optim.Adam([
+#         dict(params=model.parameters(), lr=lr),
+#     ])
 
-    #     epoch_loss = 0
-    #     with tqdm(total=n_train,
-    #               desc=f'Epoch {epoch + 1}/{epochs}',
-    #               unit='img') as pbar:
-    #         for batch in train_loader:
-    #             imgs = batch['image']
-    #             true_masks = batch['mask']
-    #             assert imgs.shape[1] == net.n_channels, \
-    #                 f'Network has been defined with {net.n_channels} input channels, ' \
-    #                 f'but loaded images have {imgs.shape[1]} channels. Please check that ' \
-    #                 'the images are loaded correctly.'
+#     train_epoch = utils.train.TrainEpoch(
+#         model,
+#         loss=loss,
+#         metrics=metrics,
+#         optimizer=optimizer,
+#         device=device,
+#         verbose=True,
+#     )
+#     valid_epoch = utils.train.ValidEpoch(
+#         model,
+#         loss=loss,
+#         metrics=metrics,
+#         device=device,
+#         verbose=True,
+#     )
 
-    #             imgs = imgs.to(device=device, dtype=torch.float32)
-    #             mask_type = torch.float32 if net.n_classes == 1 else torch.long
-    #             true_masks = true_masks.to(device=device, dtype=mask_type)
+#     max_score = 0
+#     os.makedirs(dir_checkpoint, exist_ok=True)
+#     for i in range(0, epochs):
+#         print('\nEpoch: {}'.format(i + 1))
+#         train_logs = train_epoch.run(train_loader)
+#         valid_logs = valid_epoch.run(val_loader)
 
-    #             masks_pred = net(imgs)
-    #             loss = criterion(masks_pred, true_masks)
-    #             epoch_loss += loss.item()
-    #             writer.add_scalar('Loss/train', loss.item(), global_step)
+#         # do something (save model, change lr, etc.)
+#         if max_score < valid_logs['dice_score']:
+#             max_score = valid_logs['dice_score']
+#             torch.save(model, osp.join(dir_checkpoint, 'best_model.pt'))
+#             torch.save(model.state_dict(),
+#                        osp.join(dir_checkpoint, 'best_model_dict.pth'))
+#             print('Model saved!')
 
-    #             pbar.set_postfix(**{'loss (batch)': loss.item()})
+#         if save_all_cp:
+#             torch.save(model.state_dict(),
+#                        osp.join(dir_checkpoint, f'CP_epoch{i + 1}.pth'))
+#         torch.cuda.empty_cache()
 
-    #             optimizer.zero_grad()
-    #             loss.backward()
-    #             # for name, param in net.named_parameters():
-    #             #     print(name, param.grad)
-    #             nn.utils.clip_grad_value_(net.parameters(), 0.1)
-    #             optimizer.step()
-
-    #             pbar.update(imgs.shape[0])
-    #             global_step += 1
-    #             if global_step % (n_train // (10 * batch_size)) == 0:
-    #                 for tag, value in net.named_parameters():
-    #                     try:
-    #                         tag = tag.replace('.', '/')
-    #                         writer.add_histogram('weights/' + tag,
-    #                                              value.data.cpu().numpy(),
-    #                                              global_step)
-    #                         writer.add_histogram('grads/' + tag,
-    #                                              value.grad.data.cpu().numpy(),
-    #                                              global_step)
-    #                     except AttributeError:
-    #                         pass
-    #                 val_score = eval_net(net, val_loader, device)
-    #                 scheduler.step(val_score)
-    #                 writer.add_scalar('learning_rate',
-    #                                   optimizer.param_groups[0]['lr'],
-    #                                   global_step)
-
-    #                 if net.n_classes > 1:
-    #                     logging.info(
-    #                         'Validation cross entropy: {}'.format(val_score))
-    #                     writer.add_scalar('Loss/test', val_score, global_step)
-    #                 else:
-    #                     logging.info(
-    #                         'Validation Dice Coeff: {}'.format(val_score))
-    #                     writer.add_scalar('Dice/test', val_score, global_step)
-
-    #                 writer.add_images('images', imgs, global_step)
-    #                 if net.n_classes == 1:
-    #                     writer.add_images('masks/true', true_masks,
-    #                                       global_step)
-    #                     writer.add_images('masks/pred',
-    #                                       torch.sigmoid(masks_pred) > 0.5,
-    #                                       global_step)
-
-    #     if save_cp:
-    #         try:
-    #             os.mkdir(dir_checkpoint)
-    #             logging.info('Created checkpoint directory')
-    #         except OSError:
-    #             pass
-    #         torch.save(net.state_dict(),
-    #                    osp.join(dir_checkpoint, f'CP_epoch{epoch + 1}.pth'))
-    #         logging.info(f'Checkpoint {epoch + 1} saved !')
-
-    # writer.close()
+    
+    
+ 
 
 
 if __name__ == '__main__':

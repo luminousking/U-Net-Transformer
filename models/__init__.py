@@ -1,5 +1,5 @@
 # from .unet import Unet
-from .ddrnet.DDRNet import DualResNet
+# from .ddrnet.DDRNet import DualResNet
 from .utransformer.U_Transformer import U_Transformer
 
 from typing import Optional
