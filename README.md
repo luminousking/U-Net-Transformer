@@ -1,6 +1,6 @@
-Here is the modified code for further usage. Further experiments results will be documented here. 
+Here is the modified code. Further experiments results will be documented here. 
 
-
+----------------------------------------------------------------------------------
 
 The following is the previous README:
 
