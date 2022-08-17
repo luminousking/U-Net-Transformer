@@ -224,7 +224,7 @@ def train_net(model,
     os.makedirs(dir_checkpoint, exist_ok=True)
     for i in range(0, epochs):
         print('\nEpoch: {}'.format(i + 1))
-        train_logs = train_epoch.run(train_loader)
+        #train_logs = train_epoch.run(train_loader)
         valid_logs = valid_epoch.run(val_loader)
 
         # do something (save model, change lr, etc.)
