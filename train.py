@@ -132,7 +132,7 @@ task = "training" # "test"
 
 def train_net(model,
               device,
-              epochs=5,
+              epochs=1,
               batch_size=1,
               lr=0.001,
               val_percent=0.1,
@@ -238,7 +238,7 @@ def train_net(model,
         if save_all_cp:
             torch.save(model.state_dict(),
                        osp.join(dir_checkpoint, f'CP_epoch{i + 1}.pth'))
-# BasicDataset
+## BasicDataset
 # def train_net(model,
 #               device,
 #               epochs=5,
